@@ -1,107 +1,120 @@
-import { auth, db } from "../../utils/firebase";
-import { useAuthState } from "react-firebase-hooks/auth";
-import Router, { useRouter } from "next/router";
+import Head from "next/head";
+
 import { useEffect, useState } from "react";
-import {
-  addDoc,
-  collection,
-  doc,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { toast } from "react-toastify";
+import { db } from "../../utils/firebase";
+import { collection, onSnapshot, orderBy, query,limit,startAfter,endBefore } from "firebase/firestore";
+import Link from "next/link";
 
 export default function Anime() {
-  //Form state
-  const [anime, setAnime] = useState({ description: "" });
-  const [user, loading] = useAuthState(auth);
-  const route = useRouter();
-  const routeData = route.query;
+  const [allAnimes, setAllAnimes] = useState([]);
 
-  //Submit Anime
-  const submitAnime = async (e) => {
-    e.preventDefault();
-    //Run checks for description
-    if (!anime.description) {
-      toast.error("Description Field empty 😅", {
-        position: toast.POSITION.TOP_CENTER,
-        autoClose: 1500,
-      });
-      return;
-    }
-    if (anime.description.length > 300) {
-      toast.error("Description too long 😅", {
-        position: toast.POSITION.TOP_CENTER,
-        autoClose: 1500,
-      });
-      return;
-    }
+  const [lastAnime, setLastAnime] = useState([]);
+  const [firstAnime, setFirstAnime] = useState([]);
+  const [page, setPage] = useState(1);
 
-    if (anime?.hasOwnProperty("id")) {
-      const docRef = doc(db, "movies", anime.id);
-      const updatedAnime = { ...anime, timestamp: serverTimestamp() };
-      await updateDoc(docRef, updatedAnime);
-      return route.push("/");
-    } else {
-      //Make a new anime
-      const collectionRef = collection(db, "animes");
-      await addDoc(collectionRef, {
-        ...anime,
-        timestamp: serverTimestamp(),
-        user: user.uid,
-        avatar: user.photoURL,
-        username: user.displayName,
-      });
-      setAnime({ description: "" });
-      toast.success("Anime has been made 🚀", {
-        position: toast.POSITION.TOP_CENTER,
-        autoClose: 1500,
-      });
-      return route.push("/");
-    }
+  const getAnimes = async () => {
+    const collectionRef = collection(db, "animes");
+    const q = query(collectionRef, orderBy("timestamp", "desc"),limit(2));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setAllAnimes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+      setLastAnime(snapshot.docs[snapshot.docs.length - 1]) 
+    });
+    return unsubscribe;
   };
 
-  //Check our user
-  const checkUser = async () => {
-    if (loading) return;
-    if (!user) route.push("/auth/login");
-    if (routeData.id) {
-      setAnime({ description: routeData.description, id: routeData.id });
-    }
-  };
+  const getNextAnimes = () => {
+        const collectionRef = collection(db, "animes");
+        const q = query(collectionRef, orderBy("timestamp", "desc"),startAfter(lastAnime),limit(2));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          if(snapshot.docs.length>0){
+          setAllAnimes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+          setLastAnime(snapshot.docs[snapshot.docs.length - 1]) 
+          setFirstAnime(snapshot.docs[0]) 
+          setPage(page+1);
+          }
+        });
+    
+};
+  const getPrevAnimes = () => {
+        const collectionRef = collection(db, "animes");
+        const q = query(collectionRef, orderBy("timestamp", "desc"),endBefore(firstAnime),limit(2));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          setAllAnimes(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })));
+          setLastAnime(snapshot.docs[snapshot.docs.length - 1]) 
+          setFirstAnime(snapshot.docs[0]) 
+          setPage(page-1);
+        });
+    
+};
 
   useEffect(() => {
-    checkUser();
-  }, [user, loading]);
+    getAnimes();
+  }, []);
 
   return (
-    <div className="p-12 shadow-lg rounded-lg max-w-md mx-auto">
-      <form onSubmit={submitAnime}>
-        <h1 className="text-2xl font-bold">
-          {anime.hasOwnProperty("id") ? "Edit your anime" : "Create a new anime"}
-        </h1>
-        <div className="py-2">
-          <h3 className="text-lg font-medium py-2">Description</h3>
-          <textarea
-            value={anime.description}
-            onChange={(e) => setAnime({ ...anime, description: e.target.value })}
-            className="bg-gray-800 h-48 w-full text-white rounded-lg p-2 text-sm"
-          ></textarea>
-          <p
-            className={`text-cyan-600 font-medium text-sm ${
-              anime.description.length > 300 ? "text-red-600" : ""
-            }`}
-          >
-            {anime.description.length}/300
-          </p>
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-cyan-600 text-white font-medium p-2 my-2 rounded-lg text-sm"
-        >
-          Submit
-        </button>
-      </form>
+    <div>
+      <div className="my-12 text-lg font-medium">
+        <h2  className=" font-semibold p-2  bg-gradient-to-r from-cyan-200 to-neutral-50 shadow-xl mb-1">Anime Section</h2>
+        {allAnimes.map((anime) => (
+         <div className="wrapper bg-cyan-100 antialiased text-gray-900 p-4 rounded-b-lg shadow-lg">
+         <div>
+           <img
+             src="https://source.unsplash.com/random/350x350"
+             alt=" random imgee"
+             className="w-full h-40 p-2 object-cover object-center rounded-lg shadow-md"
+           />
+
+           <div className="relative px-4 -mt-16  ">
+             <div className="bg-white p-6 rounded-lg shadow-lg">
+               <div className="flex items-baseline">
+                 <span className="bg-teal-200 text-teal-800 text-xs px-2 inline-block rounded-full  uppercase font-semibold tracking-wide">
+                   Genre
+                 </span>
+                 <div className="ml-2 text-gray-600 uppercase text-xs font-semibold tracking-wider">
+                   Action &bull; Comedy
+                 </div>
+               </div>
+
+               <h4 className="mt-1 text-xl font-semibold uppercase leading-tight truncate">
+                 {anime.description}
+                 {anime.created}
+               </h4>
+
+               <div className="mt-1">
+                 $1800
+                 <span className="text-gray-600 text-sm"> /wk</span>
+               </div>
+               <div className="mt-4">
+                 <span className="text-teal-600 text-md font-semibold">
+                   4/5 ratings{" "}
+                 </span>
+                 <span className="text-sm text-gray-600">
+                   (based on 234 ratings)
+                 </span>
+               </div>
+               <div className="mt-4">
+                 <Link
+                   href={{
+                     pathname: `movies/${anime.id}`,
+                     query: { ...anime },
+                   }}
+                 >
+                   <button className="bg-cyan-300 text-white rounded-md p-2 font-mono">
+                     See more
+                   </button>
+                 </Link>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
+        ))}
+
+        <button className="my-2 bg-cyan-300 text-white rounded-md p-2 font-mono" onClick={()=>getNextAnimes()}> Load more</button>
+      
+        <button disabled = {page===1} className="m-2 bg-cyan-300 disabled:bg-slate-400 text-white rounded-md p-2 font-mono" onClick={()=>getPrevAnimes()}> Load previous</button>
+      
+      </div>
     </div>
   );
 }
